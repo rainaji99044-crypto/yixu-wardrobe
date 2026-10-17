@@ -1,17 +1,259 @@
 'use client';
-import {createContext,useContext,useEffect,useMemo,useState,type ReactNode} from 'react';
-import {Archive,BookHeart,ChevronLeft,Download,FlaskConical,Menu,RotateCcw,Settings2,Shirt,Trash2,Upload} from 'lucide-react';
-import type {AppSettings,ClothingItem,Inspiration,MonthlyReview,Outfit} from '@/lib/models';
-import {clearAll,exportBackup,getAll,importBackup,settings} from '@/lib/db';
-import {ClosetPage} from './closet-page';import {OutfitsPage} from './outfits-page';import {StudioPage} from './studio-page';import {ReportsPage} from './reports-page';import {Confirm,Modal} from './common';
-type Page='closet'|'outfits'|'studio'|'reports';
-type Data={clothing:ClothingItem[];outfits:Outfit[];inspirations:Inspiration[];reviews:MonthlyReview[];settings:AppSettings;reload:()=>Promise<void>;notice:(s:string)=>void};
-const C=createContext<Data|null>(null);export const useWardrobe=()=>useContext(C)!;
-export default function WardrobeApp(){const [page,setPage]=useState<Page>('closet'),[collapsed,setCollapsed]=useState(false),[mobile,setMobile]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[toast,setToast]=useState(''),[manage,setManage]=useState(false),[confirmClear,setConfirmClear]=useState(false);const [data,setData]=useState<Omit<Data,'reload'|'notice'>>({clothing:[],outfits:[],inspirations:[],reviews:[],settings:{id:'settings',idleDays:90,customCategories:[],theme:'light'}});
- const reload=async()=>{setLoading(true);try{const [clothing,outfits,inspirations,reviews,appSettings]=await Promise.all([getAll<ClothingItem>('clothing'),getAll<Outfit>('outfits'),getAll<Inspiration>('inspirations'),getAll<MonthlyReview>('reviews'),settings()]);setData({clothing,outfits,inspirations,reviews,settings:appSettings});setError('');}catch(e){setError(e instanceof Error?e.message:'无法打开本地数据库');}finally{setLoading(false);}};
- useEffect(()=>{reload();const route=location.hash.slice(1) as Page;if(['closet','outfits','studio','reports'].includes(route))setPage(route);},[]);const notice=(s:string)=>{setToast(s);setTimeout(()=>setToast(''),2200)};const go=(p:Page)=>{setPage(p);location.hash=p;setMobile(false)};const ctx=useMemo(()=>({...data,reload,notice}),[data]);
- async function backup(){const b=await exportBackup();const blob=new Blob([JSON.stringify(b)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`衣序备份-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(a.href);notice('备份已导出');}
- async function restore(file?:File){if(!file)return;try{await importBackup(JSON.parse(await file.text()));await reload();notice('备份已恢复');setManage(false);}catch(e){setError(e instanceof Error?e.message:'导入失败');}}
- const nav:[Page,string,typeof Shirt][]=[['closet','衣橱',Shirt],['outfits','穿搭实验室',FlaskConical],['studio','审美研究室',BookHeart],['reports','衣橱报告',Archive]];
- return <C.Provider value={ctx}><div className={'app-shell '+(collapsed?'is-collapsed':'')}><header className="mobile-header"><button className="icon-button" onClick={()=>setMobile(!mobile)} aria-label="打开导航"><Menu/></button><Brand/><button className="icon-button" onClick={()=>setManage(true)} aria-label="数据设置"><Settings2/></button></header><aside className={mobile?'sidebar mobile-open':'sidebar'}><div className="sidebar-top"><Brand/><button className="icon-button collapse" onClick={()=>setCollapsed(!collapsed)} aria-label={collapsed?'展开导航':'折叠导航'}><ChevronLeft/></button></div><nav>{nav.map(([key,label,Icon])=><button key={key} className={'nav-item '+(page===key?'active':'')} onClick={()=>go(key)}><Icon/><span>{label}</span></button>)}</nav><div className="sidebar-quote"><BookHeart/><b>让喜欢，被常常穿起</b><p>整理、实践、观察，慢慢形成自己的穿搭语言。</p></div><button className="nav-item settings-link" onClick={()=>setManage(true)}><Settings2/><span>数据与设置</span></button></aside><main className="app-main">{loading?<div className="loading">正在打开你的衣橱…</div>:error?<div className="error-banner">{error}<button onClick={reload}>重试</button></div>:page==='closet'?<ClosetPage/>:page==='outfits'?<OutfitsPage/>:page==='studio'?<StudioPage/>:<ReportsPage/>}</main><nav className="bottom-nav">{nav.map(([key,label,Icon])=><button key={key} className={page===key?'active':''} onClick={()=>go(key)}><Icon/><span>{label}</span></button>)}</nav></div>{manage&&<Modal title="数据与设置" description="数据仅保存在当前浏览器。建议定期导出完整备份。" onClose={()=>setManage(false)}><div className="settings-stack"><button className="setting-row" onClick={backup}><Download/><span><b>导出完整备份</b><small>包括图片、衣物、穿搭、灵感与复盘</small></span></button><label className="setting-row"><Upload/><span><b>导入备份</b><small>导入会替换当前数据，并校验文件格式</small></span><input hidden type="file" accept="application/json" onChange={e=>restore(e.target.files?.[0])}/></label><button className="setting-row danger-text" onClick={()=>setConfirmClear(true)}><Trash2/><span><b>清空本地数据</b><small>此操作不可撤销</small></span></button></div></Modal>}{confirmClear&&<Confirm title="清空全部本地数据？" body="衣物照片、穿搭、灵感和复盘都会被永久删除。建议先导出备份。" confirmLabel="确认清空" onClose={()=>setConfirmClear(false)} onConfirm={async()=>{await clearAll();await reload();setConfirmClear(false);setManage(false);notice('本地数据已清空');}}/>}{toast&&<div className="toast">{toast}</div>}</C.Provider>}
-function Brand(){return <div className="brand"><span className="brand-mark"><Shirt/></span><span><b>衣序</b><small>YIXU WARDROBE</small></span></div>}
+
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import {
+  ChevronLeft,
+  Download,
+  LayoutDashboard,
+  Lightbulb,
+  Layers3,
+  Settings2,
+  Shirt,
+  Trash2,
+  Upload,
+} from 'lucide-react';
+import type {AppSettings, ClothingItem} from '@/lib/models';
+import {
+  clearAll,
+  exportBackup,
+  getAll,
+  importBackup,
+  settings,
+} from '@/lib/db';
+import {ClosetPage} from './closet-page';
+import {Confirm, Modal} from './common';
+
+type Page = 'closet' | 'outfits' | 'inspiration' | 'dashboard';
+type WardrobeData = {
+  clothing: ClothingItem[];
+  settings: AppSettings;
+  reload: () => Promise<void>;
+  notice: (message: string) => void;
+};
+
+const WardrobeContext = createContext<WardrobeData | null>(null);
+
+export function useWardrobe() {
+  const value = useContext(WardrobeContext);
+  if (!value) throw new Error('useWardrobe 必须在 WardrobeApp 中使用');
+  return value;
+}
+
+const navigation = [
+  ['closet', '衣橱', Shirt],
+  ['outfits', '穿搭', Layers3],
+  ['inspiration', '灵感', Lightbulb],
+  ['dashboard', '看板', LayoutDashboard],
+] as const;
+
+export default function WardrobeApp() {
+  const [page, setPage] = useState<Page>('closet');
+  const [collapsed, setCollapsed] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [toast, setToast] = useState('');
+  const [manage, setManage] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [data, setData] = useState({
+    clothing: [] as ClothingItem[],
+    settings: {id: 'settings', idleDays: 90, customCategories: [], theme: 'light'} as AppSettings,
+  });
+
+  async function reload() {
+    try {
+      const [clothing, appSettings] = await Promise.all([
+        getAll<ClothingItem>('clothing'),
+        settings(),
+      ]);
+      setData({clothing, settings: appSettings});
+      setError('');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '无法打开本地数据库');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void reload();
+    const route = location.hash.slice(1) as Page;
+    if (navigation.some(([key]) => key === route)) setPage(route);
+  }, []);
+
+  function notice(message: string) {
+    setToast(message);
+    window.setTimeout(() => setToast(''), 2200);
+  }
+
+  function go(next: Page) {
+    setPage(next);
+    location.hash = next;
+  }
+
+  async function backup() {
+    try {
+      const value = await exportBackup();
+      const blob = new Blob([JSON.stringify(value)], {type: 'application/json'});
+      const anchor = document.createElement('a');
+      anchor.href = URL.createObjectURL(blob);
+      anchor.download = `衣序备份-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(anchor.href);
+      notice('备份已导出');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '备份失败');
+    }
+  }
+
+  async function restore(file?: File) {
+    if (!file) return;
+    try {
+      await importBackup(JSON.parse(await file.text()));
+      await reload();
+      setManage(false);
+      notice('备份已恢复');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '导入失败');
+    }
+  }
+
+  const contextValue = useMemo(
+    () => ({...data, reload, notice}),
+    [data],
+  );
+
+  return (
+    <WardrobeContext.Provider value={contextValue}>
+      <div className={`app-shell ${collapsed ? 'is-collapsed' : ''}`}>
+        <header className="mobile-header">
+          <Brand />
+          <button className="icon-button" onClick={() => setManage(true)} aria-label="数据设置">
+            <Settings2 />
+          </button>
+        </header>
+
+        <aside className="sidebar">
+          <div className="sidebar-top">
+            <Brand />
+            <button
+              className="icon-button collapse"
+              onClick={() => setCollapsed(value => !value)}
+              aria-label={collapsed ? '展开导航' : '折叠导航'}
+            >
+              <ChevronLeft />
+            </button>
+          </div>
+          <nav aria-label="主要导航">
+            {navigation.map(([key, label, Icon]) => (
+              <button key={key} className={`nav-item ${page === key ? 'active' : ''}`} onClick={() => go(key)}>
+                <Icon />
+                <span>{label}</span>
+              </button>
+            ))}
+          </nav>
+          <div className="sidebar-quote">
+            <Lightbulb />
+            <b>让喜欢，被常常穿起</b>
+            <p>先把衣橱整理清楚，再慢慢形成自己的穿搭语言。</p>
+          </div>
+          <button className="nav-item settings-link" onClick={() => setManage(true)}>
+            <Settings2 />
+            <span>数据与设置</span>
+          </button>
+        </aside>
+
+        <main className="app-main">
+          {loading ? (
+            <div className="loading">正在打开你的衣橱…</div>
+          ) : error ? (
+            <div className="error-banner" role="alert">
+              {error}
+              <button onClick={() => void reload()}>重试</button>
+            </div>
+          ) : page === 'closet' ? (
+            <ClosetPage />
+          ) : (
+            <PhasePlaceholder page={page} />
+          )}
+        </main>
+
+        <nav className="bottom-nav" aria-label="手机导航">
+          {navigation.map(([key, label, Icon]) => (
+            <button key={key} className={page === key ? 'active' : ''} onClick={() => go(key)}>
+              <Icon />
+              <span>{label}</span>
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {manage && (
+        <Modal title="数据与设置" description="衣物资料仅保存在当前浏览器。" onClose={() => setManage(false)}>
+          <div className="settings-stack">
+            <button className="setting-row" onClick={() => void backup()}>
+              <Download />
+              <span><b>导出本地备份</b><small>为后续迁移与恢复预留的数据接口</small></span>
+            </button>
+            <label className="setting-row">
+              <Upload />
+              <span><b>导入备份</b><small>导入会替换当前浏览器中的衣序数据</small></span>
+              <input hidden type="file" accept="application/json" onChange={event => void restore(event.target.files?.[0])} />
+            </label>
+            <button className="setting-row danger-text" onClick={() => setConfirmClear(true)}>
+              <Trash2 />
+              <span><b>清空本地数据</b><small>删除前会再次确认</small></span>
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {confirmClear && (
+        <Confirm
+          title="清空全部本地数据？"
+          body="当前浏览器中的衣物图片和资料会被永久删除。建议先导出备份。"
+          confirmLabel="确认清空"
+          onClose={() => setConfirmClear(false)}
+          onConfirm={() => void (async () => {
+            await clearAll();
+            await reload();
+            setConfirmClear(false);
+            setManage(false);
+            notice('本地数据已清空');
+          })()}
+        />
+      )}
+      {toast && <div className="toast" role="status">{toast}</div>}
+    </WardrobeContext.Provider>
+  );
+}
+
+function PhasePlaceholder({page}: {page: Exclude<Page, 'closet'>}) {
+  const copy = {
+    outfits: ['穿搭', '穿搭组合与记录将在后续阶段开发。'],
+    inspiration: ['灵感', '灵感收集与整理将在后续阶段开发。'],
+    dashboard: ['看板', '基于真实衣橱数据的统计将在后续阶段开发。'],
+  }[page];
+  return (
+    <section className="phase-placeholder">
+      <span className="eyebrow">NEXT PHASE</span>
+      <h1>{copy[0]}</h1>
+      <p>{copy[1]}</p>
+      <span className="phase-badge">后续阶段</span>
+    </section>
+  );
+}
+
+function Brand() {
+  return (
+    <div className="brand">
+      <span className="brand-mark"><Shirt /></span>
+      <span><b>衣序</b><small>YIXU WARDROBE</small></span>
+    </div>
+  );
+}
