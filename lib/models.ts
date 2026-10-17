@@ -1,0 +1,15 @@
+export type Id = string;
+export type ClothingStatus = '收藏'|'常穿'|'闲置'|'待处理';
+export type ClothingItem = {id:Id;name:string;image:Blob;category:string;color:string;seasons:string[];styles:string[];brand?:string;purchaseDate?:string;price?:number;notes:string;statuses:ClothingStatus[];wearCount:number;lastWornDate?:string;createdAt:string;updatedAt:string};
+export type OutfitFeedback = {tall:boolean;slim:boolean;comfortable:boolean;expected:boolean;rewear:boolean;improve:string};
+export type Outfit = {id:Id;name:string;itemIds:Id[];date?:string;scene:string;weather?:string;colorScheme:string;styles:string[];comfort:number;effect:string;rating:number;notes:string;photos:{front?:Blob;side?:Blob;back?:Blob};feedback:OutfitFeedback;favorite:boolean;createdAt:string;updatedAt:string};
+export type Inspiration = {id:Id;image:Blob;title:string;source?:string;notes:string;tags:string[];colors:string[];analysis:Record<string,string>;tried:boolean;createdAt:string;updatedAt:string};
+export type MonthlyReview = {id:Id;month:string;bestOutfitId?:Id;mostWornItemId?:Id;discoveries:string;purchases:string;retirements:string;nextStyle:string;reduceSpending:string;createdAt:string;updatedAt:string};
+export type AppSettings = {id:'settings';idleDays:number;customCategories:string[];theme:'light'};
+export type Backup = {version:1;exportedAt:string;clothing:Array<Omit<ClothingItem,'image'>&{image:string}>;outfits:Array<Omit<Outfit,'photos'>&{photos:{front?:string;side?:string;back?:string}}> ;inspirations:Array<Omit<Inspiration,'image'>&{image:string}>;reviews:MonthlyReview[];settings:AppSettings};
+export const BASE_CATEGORIES=['上衣','裤装','半身裙','连衣裙','外套','鞋履','包袋','配饰','其他'];
+export const COLORS=['黑色','白色','灰色','米色','棕色','红色','粉色','橙色','黄色','绿色','蓝色','紫色','金属色','多色'];
+export const SEASONS=['春','夏','秋','冬','四季'];
+export const STYLES=['简约','通勤','休闲','优雅','复古','运动','甜美','中性'];
+export const SCENES=['通勤','约会','居家','出游','聚会','正式场合'];
+export const ANALYSIS_KEYS=['配色','廓形','腰线','上下身比例','面料质感','图案','层次感','配饰','风格','场景'];
