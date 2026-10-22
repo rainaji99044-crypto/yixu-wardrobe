@@ -1,4 +1,4 @@
-const CACHE = 'yixu-shell-20261022';
+const CACHE = 'yixu-shell-20261022-v2';
 const SHELL = [
   '/',
   '/manifest.webmanifest',

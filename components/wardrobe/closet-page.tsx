@@ -17,10 +17,12 @@ import {
 import {
   BASE_CATEGORIES,
   COLORS,
+  STYLES,
+  THICKNESSES,
   type ClothingItem,
   type ClothingStatus,
 } from '@/lib/models';
-import {compressImage} from '@/lib/images';
+import {processGarmentImage} from '@/lib/images';
 import {put, remove} from '@/lib/db';
 import {useWardrobe} from './app';
 import {BlobImage, Confirm, EmptyState, Modal} from './common';
@@ -53,8 +55,8 @@ function normalizedSeasons(item: ClothingItem) {
 export function ClosetPage() {
   const {clothing, settings, reload, notice} = useWardrobe();
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState('全部');
   const [seasons, setSeasons] = useState<string[]>([]);
+  const [style, setStyle] = useState('全部');
   const [sort, setSort] = useState<SortKey>('recent');
   const [detail, setDetail] = useState<ClothingItem | null>(null);
   const [draft, setDraft] = useState<Partial<ClothingItem> | null>(null);
@@ -67,12 +69,12 @@ export function ClosetPage() {
     const term = query.trim().toLocaleLowerCase('zh-CN');
     return clothing
       .filter(item => {
-        const haystack = [item.name, item.brand, item.color, item.notes].join(' ').toLocaleLowerCase('zh-CN');
+        const haystack = [item.name, item.category, item.styles.join(' ')].join(' ').toLocaleLowerCase('zh-CN');
         const matchesSearch = !term || haystack.includes(term);
-        const matchesCategory = category === '全部' || item.category === category;
         const itemSeasons = normalizedSeasons(item);
         const matchesSeason = seasons.length === 0 || seasons.some(value => itemSeasons.includes(value));
-        return matchesSearch && matchesCategory && matchesSeason;
+        const matchesStyle = style === '全部' || item.styles.includes(style);
+        return matchesSearch && matchesSeason && matchesStyle;
       })
       .sort((a, b) => {
         if (sort === 'name') return a.name.localeCompare(b.name, 'zh-CN');
@@ -85,7 +87,7 @@ export function ClosetPage() {
         }
         return b.createdAt.localeCompare(a.createdAt);
       });
-  }, [clothing, query, category, seasons, sort]);
+  }, [clothing, query, seasons, style, sort]);
 
   function beginAdd() {
     setFormError('');
@@ -101,17 +103,17 @@ export function ClosetPage() {
   async function chooseImage(file?: File) {
     if (!file) return;
     try {
-      const image = await compressImage(file);
-      setDraft(current => current ? {...current, image} : current);
+      setBusy(true);
+      const {image,tags} = await processGarmentImage(file);
+      setDraft(current => current ? {...current, image, ...tags, name: current.name || `${tags.color}${tags.category}`} : current);
       setFormError('');
     } catch (cause) {
       setFormError(cause instanceof Error ? cause.message : '图片读取失败');
-    }
+    } finally { setBusy(false); }
   }
 
   async function save() {
     if (!draft) return;
-    if (!draft.name?.trim()) return setFormError('请填写衣物名称');
     if (!draft.category) return setFormError('请选择衣物类别');
     if (!draft.image) return setFormError('请上传衣物图片');
     setBusy(true);
@@ -119,7 +121,7 @@ export function ClosetPage() {
       const now = new Date().toISOString();
       const item: ClothingItem = {
         id: draft.id ?? crypto.randomUUID(),
-        name: draft.name.trim(),
+        name: draft.name?.trim() || `${draft.color || ''}${draft.category}` || '未命名衣物',
         image: draft.image,
         category: draft.category,
         color: draft.color?.trim() ?? '',
@@ -218,7 +220,7 @@ export function ClosetPage() {
             <input
               value={query}
               onChange={event => setQuery(event.target.value)}
-              placeholder="搜索名称、品牌、颜色或备注"
+              placeholder="搜索名称或风格"
               aria-label="搜索衣物"
             />
             {query && <button type="button" onClick={() => setQuery('')} aria-label="清空搜索"><X /></button>}
@@ -247,10 +249,10 @@ export function ClosetPage() {
         </div>
 
         <div className="filter-block">
-          <div className="filter-label"><span>分类</span></div>
+          <div className="filter-label"><span>风格</span></div>
           <div className="filter-chips horizontal-scroll">
-            {['全部', ...categories].map(value => (
-              <button key={value} className={category === value ? 'active' : ''} onClick={() => setCategory(value)}>{value}</button>
+            {['全部', ...STYLES].map(value => (
+              <button key={value} className={style === value ? 'active' : ''} onClick={() => setStyle(value)}>{value}</button>
             ))}
           </div>
         </div>
@@ -258,7 +260,7 @@ export function ClosetPage() {
 
       <div className="results-line">
         <span>{results.length} 件衣物</span>
-        {(query || category !== '全部' || seasons.length > 0) && <span>已应用筛选</span>}
+        {(query || style !== '全部' || seasons.length > 0) && <span>已应用筛选</span>}
       </div>
 
       {results.length ? (
@@ -282,7 +284,7 @@ export function ClosetPage() {
           icon={<Shirt />}
           title={clothing.length ? '没有符合条件的衣物' : '从第一件衣物开始'}
           body={clothing.length ? '清除部分筛选条件，再看看衣橱。' : '上传真实衣物照片并填写基本信息，数据会保存在当前设备。'}
-          action={clothing.length ? <button className="button secondary" onClick={() => {setQuery(''); setCategory('全部'); setSeasons([]);}}>清除筛选</button> : <button className="button primary" onClick={beginAdd}><Plus />添加衣物</button>}
+          action={clothing.length ? <button className="button secondary" onClick={() => {setQuery(''); setStyle('全部'); setSeasons([]);}}>清除筛选</button> : <button className="button primary" onClick={beginAdd}><Plus />添加衣物</button>}
         />
       )}
 
@@ -316,7 +318,7 @@ export function ClosetPage() {
       )}
 
       {draft && (
-        <Modal title={draft.id ? '编辑衣物' : '添加衣物'} description="第一阶段采用普通图片上传与人工填写，不进行 AI 识别或去背景。" onClose={() => setDraft(null)}>
+        <Modal title={draft.id ? '编辑衣物' : '添加衣物'} description="照片会在本机自动去除背景并识别资料，识别结果可手动调整。" onClose={() => setDraft(null)}>
           <div className="item-form">
             <div className="upload-panel">
               {draft.image ? (
@@ -325,7 +327,7 @@ export function ClosetPage() {
                   <button type="button" className="icon-button" onClick={() => setDraft({...draft, image: undefined})} aria-label="取消上传"><X /></button>
                 </div>
               ) : (
-                <div className="upload-empty"><ImagePlus /><b>添加衣物照片 *</b><small>JPG、PNG 或 WebP，最大 20MB</small></div>
+                <div className="upload-empty"><ImagePlus /><b>{busy ? '正在处理照片…' : '添加衣物照片 *'}</b><small>自动透明底与基础识别 · JPG、PNG 或 WebP</small></div>
               )}
               <div className="upload-actions">
                 <label className="button secondary"><ImagePlus />{draft.image ? '更换照片' : '从相册或文件选择'}<input hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={event => void chooseImage(event.target.files?.[0])} /></label>
@@ -334,12 +336,12 @@ export function ClosetPage() {
             </div>
 
             <div className="form-grid">
-              <label>衣物名称 *<input value={draft.name ?? ''} maxLength={60} onChange={event => setDraft({...draft, name: event.target.value})} /></label>
               <label>衣物类别 *<select value={draft.category ?? ''} onChange={event => setDraft({...draft, category: event.target.value})}><option value="">请选择</option>{categories.map(value => <option key={value}>{value}</option>)}</select></label>
               <label>颜色<input value={draft.color ?? ''} list="color-options" maxLength={30} onChange={event => setDraft({...draft, color: event.target.value})} /><datalist id="color-options">{COLORS.map(value => <option key={value}>{value}</option>)}</datalist></label>
               <label>品牌<input value={draft.brand ?? ''} maxLength={60} onChange={event => setDraft({...draft, brand: event.target.value})} /></label>
               <label>购买价格<input type="number" min="0" step="0.01" value={draft.price ?? ''} onChange={event => setDraft({...draft, price: event.target.value ? Number(event.target.value) : undefined})} /></label>
               <label>购买日期<input type="date" value={draft.purchaseDate ?? ''} onChange={event => setDraft({...draft, purchaseDate: event.target.value})} /></label>
+              <label>薄厚<select value={draft.thickness ?? ''} onChange={event => setDraft({...draft, thickness:event.target.value})}><option value="">请选择</option>{THICKNESSES.map(value=><option key={value}>{value}</option>)}</select></label>
             </div>
 
             <fieldset>
@@ -348,7 +350,7 @@ export function ClosetPage() {
                 {SEASON_OPTIONS.map(value => <label key={value}><input type="checkbox" checked={draft.seasons?.includes(value) ?? false} onChange={event => setDraft({...draft, seasons: event.target.checked ? [...(draft.seasons ?? []), value] : draft.seasons?.filter(item => item !== value)})} />{value}</label>)}
               </div>
             </fieldset>
-            <label>风格文字<input value={draft.styles?.[0] ?? ''} maxLength={60} placeholder="例如：通勤、简约" onChange={event => setDraft({...draft, styles: event.target.value ? [event.target.value] : []})} /></label>
+            <label>风格<select value={draft.styles?.[0] ?? ''} onChange={event => setDraft({...draft, styles:event.target.value?[event.target.value]:[]})}><option value="">请选择</option>{STYLES.map(value=><option key={value}>{value}</option>)}</select></label>
             <label>备注<textarea value={draft.notes ?? ''} maxLength={500} onChange={event => setDraft({...draft, notes: event.target.value})} /></label>
             {formError && <p className="form-error" role="alert">{formError}</p>}
             <div className="dialog-actions">

@@ -18,7 +18,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import type {AppSettings, ClothingItem} from '@/lib/models';
+import type {AppSettings, ClothingItem, Inspiration, MonthlyReview, Outfit} from '@/lib/models';
 import {
   clearAll,
   exportBackup,
@@ -27,11 +27,17 @@ import {
   settings,
 } from '@/lib/db';
 import {ClosetPage} from './closet-page';
+import {OutfitsPage} from './outfits-page';
+import {InspirationPage} from './inspiration-page';
+import {DashboardPage} from './dashboard-page';
 import {Confirm, Modal} from './common';
 
 type Page = 'closet' | 'outfits' | 'inspiration' | 'dashboard';
 type WardrobeData = {
   clothing: ClothingItem[];
+  outfits: Outfit[];
+  inspirations: Inspiration[];
+  reviews: MonthlyReview[];
   settings: AppSettings;
   reload: () => Promise<void>;
   notice: (message: string) => void;
@@ -61,17 +67,18 @@ export default function WardrobeApp() {
   const [manage, setManage] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [data, setData] = useState({
-    clothing: [] as ClothingItem[],
+    clothing: [] as ClothingItem[], outfits: [] as Outfit[], inspirations: [] as Inspiration[], reviews: [] as MonthlyReview[],
     settings: {id: 'settings', idleDays: 90, customCategories: [], theme: 'light'} as AppSettings,
   });
 
   async function reload() {
     try {
-      const [clothing, appSettings] = await Promise.all([
-        getAll<ClothingItem>('clothing'),
-        settings(),
-      ]);
-      setData({clothing, settings: appSettings});
+      const clothing = await getAll<ClothingItem>('clothing');
+      const outfits = await getAll<Outfit>('outfits');
+      const inspirations = await getAll<Inspiration>('inspirations');
+      const reviews = await getAll<MonthlyReview>('reviews');
+      const appSettings = await settings();
+      setData({clothing, outfits, inspirations, reviews, settings: appSettings});
       setError('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '无法打开本地数据库');
@@ -176,11 +183,10 @@ export default function WardrobeApp() {
               {error}
               <button onClick={() => void reload()}>重试</button>
             </div>
-          ) : page === 'closet' ? (
-            <ClosetPage />
-          ) : (
-            <PhasePlaceholder page={page} />
-          )}
+          ) : page === 'closet' ? <ClosetPage />
+            : page === 'outfits' ? <OutfitsPage />
+            : page === 'inspiration' ? <InspirationPage />
+            : <DashboardPage onGo={go} />}
         </main>
 
         <nav className="bottom-nav" aria-label="手机导航">
@@ -230,22 +236,6 @@ export default function WardrobeApp() {
       )}
       {toast && <div className="toast" role="status">{toast}</div>}
     </WardrobeContext.Provider>
-  );
-}
-
-function PhasePlaceholder({page}: {page: Exclude<Page, 'closet'>}) {
-  const copy = {
-    outfits: ['穿搭', '穿搭组合与记录将在后续阶段开发。'],
-    inspiration: ['灵感', '灵感收集与整理将在后续阶段开发。'],
-    dashboard: ['看板', '基于真实衣橱数据的统计将在后续阶段开发。'],
-  }[page];
-  return (
-    <section className="phase-placeholder">
-      <span className="eyebrow">NEXT PHASE</span>
-      <h1>{copy[0]}</h1>
-      <p>{copy[1]}</p>
-      <span className="phase-badge">后续阶段</span>
-    </section>
   );
 }
 
